@@ -15,7 +15,7 @@ This is a Minimum Viable Product (MVP) prototype designed to demonstrate a verif
 - Modern web browser (Chrome, Firefox, Edge)
 
 ### Project Dependencies
-Install required dependencies:
+Install Hardhat dependencies:
 ```bash
 npm install
 ```
