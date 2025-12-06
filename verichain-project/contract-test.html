@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>🔗 VeriChain 合约测试页面</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 1000px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #333; border-bottom: 2px solid #4CAF50; padding-bottom: 10px; }
+        .status { padding: 15px; border-radius: 5px; margin: 15px 0; }
+        .status.success { background: #e8f5e9; border-left: 4px solid #4CAF50; }
+        .status.error { background: #ffebee; border-left: 4px solid #f44336; }
+        .status.info { background: #e3f2fd; border-left: 4px solid #2196F3; }
+        button { background: #4CAF50; color: white; border: none; padding: 12px 20px; border-radius: 5px; cursor: pointer; font-size: 16px; margin: 5px; }
+        button:hover { background: #45a049; }
+        button:disabled { background: #cccccc; cursor: not-allowed; }
+        button.secondary { background: #2196F3; }
+        button.secondary:hover { background: #0b7dda; }
+        .result { background: #f9f9f9; padding: 15px; border-radius: 5px; margin: 15px 0; border: 1px solid #ddd; white-space: pre-wrap; font-family: monospace; font-size: 14px; max-height: 400px; overflow-y: auto; }
+        .section { margin: 25px 0; padding: 20px; border: 1px solid #eee; border-radius: 5px; }
+        .form-group { margin: 10px 0; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 16px; margin-bottom: 10px; }
+        .address { font-family: monospace; background: #f0f0f0; padding: 2px 6px; border-radius: 3px; }
+        .network-info { background: #e3f2fd; padding: 10px; border-radius: 5px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔗 VeriChain 合约测试页面</h1>
+        
+        <div class="network-info">
+            <strong>网络:</strong> Hardhat Local (http://localhost:8545)<br>
+            <strong>合约地址:</strong> <span id="contractAddress">未加载</span><br>
+            <strong>状态:</strong> <span id="networkStatus">准备中...</span>
+        </div>
+        
+        <div class="section">
+            <h2>1. 连接钱包</h2>
+            <button onclick="connectWallet()" id="connectBtn">连接 MetaMask</button>
+            <div id="walletInfo"></div>
+        </div>
+        
+        <div class="section">
+            <h2>2. 加载合约信息</h2>
+            <button onclick="loadContractInfo()" id="loadBtn">加载合约信息</button>
+            <div id="contractInfo"></div>
+        </div>
+        
+        <div class="section">
+            <h2>3. 合约函数测试</h2>
+            
+            <div class="form-group">
+                <label>测试地址:</label>
+                <input type="text" id="testAddress" placeholder="0x..." value="0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266">
+            </div>
+            
+            <div>
+                <button onclick="testIsHuman()">测试 isHuman()</button>
+                <button onclick="testVerifiers()">测试 verifiers()</button>
+                <button onclick="testOwner()">测试 owner()</button>
+                <button onclick="testMessageHash()" class="secondary">测试 getMessageHash()</button>
+            </div>
+            
+            <div id="functionTestResult"></div>
+        </div>
+        
+        <div class="section">
+            <h2>4. 完整验证流程测试</h2>
+            <p>模拟完整的验证者签名流程：</p>
+            
+            <div class="form-group">
+                <label>用户地址:</label>
+                <input type="text" id="userAddress" placeholder="输入要验证的地址">
+            </div>
+            
+            <div class="form-group">
+                <label>Nonce (随机数):</label>
+                <input type="number" id="nonceInput" placeholder="12345" value="12345">
+            </div>
+            
+            <button onclick="testFullVerification()" id="verifyBtn">执行完整验证测试</button>
+            <div id="verificationResult"></div>
+        </div>
+        
+        <div class="section">
+            <h2>5. 批量地址检查</h2>
+            <textarea id="addressList" rows="4" placeholder="每行一个地址&#10;0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266&#10;0x70997970C51812dc3A010C7d01b50e0d17dc79C8"></textarea>
+            <button onclick="checkBatch()">批量检查</button>
+            <div id="batchResult"></div>
+        </div>
+        
+        <div class="result" id="result"></div>
+        
+        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
+            <h3>📋 测试说明</h3>
+            <ol>
+                <li>确保 Hardhat 节点正在运行 (npx hardhat node)</li>
+                <li>确保合约已部署 (npx hardhat run scripts/deploy.js --network localhost)</li>
+                <li>MetaMask 需要连接到 Hardhat 网络 (localhost:8545)</li>
+                <li>部分测试需要验证者私钥签名，这由后端处理</li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        // 全局变量
+        let provider = null;
+        let signer = null;
+        let userAddress = null;
+        let contract = null;
+        let contractAddress = null;
+        const CONTRACT_ABI = [
+            "function isHuman(address user) public view returns (bool)",
+            "function verifiers(address) public view returns (bool)",
+            "function owner() public view returns (address)",
+            "function getMessageHash(address user, uint256 nonce) public pure returns (bytes32)",
+            "function getEthSignedMessageHash(bytes32 _messageHash) public pure returns (bytes32)",
+            "function submitProof(address user, uint256 nonce, bytes calldata signature) external",
+            "event ProofSubmitted(address indexed user, address indexed verifier, bytes32 proofId)"
+        ];
+
+        // 1. 连接钱包
+        async function connectWallet() {
+            showResult("正在连接钱包...", "info");
+            
+            if (!window.ethereum) {
+                showResult("❌ 请安装 MetaMask 扩展", "error");
+                return;
+            }
+            
+            try {
+                const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                userAddress = accounts[0];
+                
+                provider = new ethers.providers.Web3Provider(window.ethereum);
+                signer = provider.getSigner();
+                
+                const network = await provider.getNetwork();
+                
+                document.getElementById('walletInfo').innerHTML = `
+                    <div class="status success">
+                        ✅ 钱包连接成功<br>
+                        <strong>地址:</strong> <span class="address">${userAddress}</span><br>
+                        <strong>网络:</strong> ${network.name} (ID: ${network.chainId})
+                    </div>
+                `;
+                
+                showResult(`✅ 钱包连接成功: ${userAddress}`, "success");
+                
+            } catch (error) {
+                showResult(`❌ 连接失败: ${error.message}`, "error");
+            }
+        }
+
+        // 2. 加载合约信息
+        async function loadContractInfo() {
+            showResult("正在加载合约信息...", "info");
+            
+            try {
+                // 从服务器获取合约信息
+                const response = await fetch('http://localhost:3000/api/status');
+                const data = await response.json();
+                
+                if (!data.config.contractAddress) {
+                    showResult("❌ 未找到合约地址，请先部署合约", "error");
+                    return;
+                }
+                
+                contractAddress = data.config.contractAddress;
+                document.getElementById('contractAddress').textContent = contractAddress;
+                document.getElementById('networkStatus').textContent = "已连接";
+                document.getElementById('networkStatus').style.color = "green";
+                
+                // 创建合约实例
+                contract = new ethers.Contract(contractAddress, CONTRACT_ABI, signer || provider);
+                
+                document.getElementById('contractInfo').innerHTML = `
+                    <div class="status success">
+                        ✅ 合约加载成功<br>
+                        <strong>地址:</strong> <span class="address">${contractAddress}</span><br>
+                        <strong>网络:</strong> ${data.config.network}
+                    </div>
+                `;
+                
+                showResult(`✅ 合约加载成功: ${contractAddress}`, "success");
+                
+            } catch (error) {
+                showResult(`❌ 加载失败: ${error.message}`, "error");
+            }
+        }
+
+        // 3.1 测试 isHuman 函数
+        async function testIsHuman() {
+            const address = document.getElementById('testAddress').value.trim();
+            if (!address) {
+                showResult("请输入测试地址", "error");
+                return;
+            }
+            
+            if (!contract) {
+                showResult("请先加载合约", "error");
+                return;
+            }
+            
+            showResult(`正在检查 ${address} 是否为人类...`, "info");
+            
+            try {
+                const isHuman = await contract.isHuman(address);
+                
+                document.getElementById('functionTestResult').innerHTML = `
+                    <div class="status ${isHuman ? 'success' : 'info'}">
+                        ${isHuman ? '✅' : '❌'} 地址 ${address}<br>
+                        <strong>isHuman:</strong> ${isHuman}<br>
+                        <strong>状态:</strong> ${isHuman ? '已验证为人类' : '未验证'}
+                    </div>
+                `;
+                
+                showResult(`✅ isHuman(${address}) = ${isHuman}`, "success");
+                
+            } catch (error) {
+                showResult(`❌ 测试失败: ${error.message}`, "error");
+            }
+        }
+
+        // 3.2 测试 verifiers 函数
+        async function testVerifiers() {
+            if (!contract) {
+                showResult("请先加载合约", "error");
+                return;
+            }
+            
+            showResult("正在获取验证者信息...", "info");
+            
+            try {
+                // 从服务器获取验证者地址
+                const response = await fetch('http://localhost:3000/api/status');
+                const data = await response.json();
+                
+                if (!data.config.contractAddress) {
+                    showResult("未找到验证者信息", "error");
+                    return;
+                }
+                
+                // 我们可以测试几个已知地址
+                const testAddresses = [
+                    "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266", // Hardhat 账户0
+                    userAddress,
+                    "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"  // 可能的验证者
+                ];
+                
+                let resultHtml = '<div class="status info"><strong>验证者状态:</strong><br>';
+                
+                for (const addr of testAddresses) {
+                    try {
+                        const isVerifier = await contract.verifiers(addr);
+                        resultHtml += `${addr.substring(0, 10)}...: ${isVerifier ? '✅' : '❌'}<br>`;
+                    } catch (e) {
+                        resultHtml += `${addr.substring(0, 10)}...: 查询失败<br>`;
+                    }
+                }
+                
+                resultHtml += '</div>';
+                document.getElementById('functionTestResult').innerHTML = resultHtml;
+                
+                showResult("✅ 验证者状态查询完成", "success");
+                
+            } catch (error) {
+                showResult(`❌ 测试失败: ${error.message}`, "error");
+            }
+        }
+
+        // 3.3 测试 owner 函数
+        async function testOwner() {
+            if (!contract) {
+                showResult("请先加载合约", "error");
+                return;
+            }
+            
+            showResult("正在查询合约所有者...", "info");
+            
+            try {
+                const owner = await contract.owner();
+                
+                document.getElementById('functionTestResult').innerHTML = `
+                    <div class="status success">
+                        ✅ 合约所有者查询成功<br>
+                        <strong>owner():</strong> <span class="address">${owner}</span>
+                    </div>
+                `;
+                
+                showResult(`✅ owner() = ${owner}`, "success");
+                
+            } catch (error) {
+                showResult(`❌ 测试失败: ${error.message}`, "error");
+            }
+        }
+
+        // 3.4 测试 getMessageHash 函数
+        async function testMessageHash() {
+            const address = document.getElementById('testAddress').value.trim();
+            if (!address) {
+                showResult("请输入测试地址", "error");
+                return;
+            }
+            
+            if (!contract) {
+                showResult("请先加载合约", "error");
+                return;
+            }
+            
+            const nonce = Math.floor(Math.random() * 1000000);
+            showResult(`正在计算消息哈希: address=${address}, nonce=${nonce}`, "info");
+            
+            try {
+                const messageHash = await contract.getMessageHash(address, nonce);
+                const ethHash = await contract.getEthSignedMessageHash(messageHash);
+                
+                document.getElementById('functionTestResult').innerHTML = `
+                    <div class="status success">
+                        ✅ 消息哈希计算成功<br>
+                        <strong>输入:</strong> address=${address.substring(0, 10)}..., nonce=${nonce}<br>
+                        <strong>getMessageHash:</strong> ${messageHash}<br>
+                        <strong>getEthSignedMessageHash:</strong> ${ethHash}
+                    </div>
+                `;
+                
+                showResult(`✅ 哈希计算成功\nmessageHash: ${messageHash}\nethHash: ${ethHash}`, "success");
+                
+            } catch (error) {
+                showResult(`❌ 测试失败: ${error.message}`, "error");
+            }
+        }
+
+        // 4. 完整验证流程测试
+        async function testFullVerification() {
+            const userAddressInput = document.getElementById('userAddress').value.trim();
+            const nonce = document.getElementById('nonceInput').value;
+            
+            if (!userAddressInput) {
+                showResult("请输入用户地址", "error");
+                return;
+            }
+            
+            if (!nonce) {
+                showResult("请输入 nonce", "error");
+                return;
+            }
+            
+            showResult(`开始完整验证流程测试...\n用户: ${userAddressInput}\nNonce: ${nonce}`, "info");
+            
+            try {
+                // 1. 检查当前状态
+                const isHumanBefore = await contract.isHuman(userAddressInput);
+                showResult(`1. 验证前状态: ${isHumanBefore ? '✅ 已验证' : '❌ 未验证'}`, "info");
+                
+                // 2. 通过后端 API 进行验证
+                showResult("2. 通过后端 API 进行验证...", "info");
+                
+                // 首先获取 nonce
+                const nonceResponse = await fetch(`http://localhost:3000/api/nonce/${userAddressInput}`);
+                const nonceData = await nonceResponse.json();
+                
+                if (!nonceData.success) {
+                    throw new Error(`获取 nonce 失败: ${nonceData.error}`);
+                }
+                
+                // 这里需要用户签名，但我们无法在测试页面自动完成
+                // 所以这里只是演示流程
+                document.getElementById('verificationResult').innerHTML = `
+                    <div class="status info">
+                        ⚠️ 完整验证需要用户签名<br>
+                        请在 KYC 测试页面完成完整流程<br><br>
+                        <strong>已完成的步骤:</strong><br>
+                        1. 检查状态: ${isHumanBefore ? '已验证' : '未验证'}<br>
+                        2. 获取 nonce: ${nonceData.nonce.substring(0, 10)}...<br>
+                        3. 需要签名消息: ${nonceData.message}
+                    </div>
+                `;
+                
+                showResult("✅ 验证流程演示完成\n注意：完整验证需要在 KYC 测试页面完成", "success");
+                
+            } catch (error) {
+                showResult(`❌ 验证测试失败: ${error.message}`, "error");
+            }
+        }
+
+        // 5. 批量地址检查
+        async function checkBatch() {
+            const addressList = document.getElementById('addressList').value.trim();
+            if (!addressList) {
+                showResult("请输入地址列表", "error");
+                return;
+            }
+            
+            const addresses = addressList.split('\n').filter(addr => addr.trim());
+            
+            if (!contract) {
+                showResult("请先加载合约", "error");
+                return;
+            }
+            
+            showResult(`正在检查 ${addresses.length} 个地址...`, "info");
+            
+            try {
+                let results = [];
+                let verifiedCount = 0;
+                
+                for (const address of addresses) {
+                    try {
+                        const isHuman = await contract.isHuman(address.trim());
+                        results.push({
+                            address: address.trim(),
+                            verified: isHuman
+                        });
+                        if (isHuman) verifiedCount++;
+                    } catch (error) {
+                        results.push({
+                            address: address.trim(),
+                            error: error.message
+                        });
+                    }
+                }
+                
+                let resultHtml = `<div class="status info">
+                    <strong>批量检查结果:</strong><br>
+                    总数: ${addresses.length}，已验证: ${verifiedCount}<br><br>
+                `;
+                
+                results.forEach(result => {
+                    if (result.error) {
+                        resultHtml += `<span style="color: red">❌ ${result.address}: ${result.error}</span><br>`;
+                    } else {
+                        resultHtml += `${result.verified ? '✅' : '❌'} ${result.address}: ${result.verified ? '已验证' : '未验证'}<br>`;
+                    }
+                });
+                
+                resultHtml += '</div>';
+                document.getElementById('batchResult').innerHTML = resultHtml;
+                
+                showResult(`✅ 批量检查完成\n总数: ${addresses.length}，已验证: ${verifiedCount}`, "success");
+                
+            } catch (error) {
+                showResult(`❌ 批量检查失败: ${error.message}`, "error");
+            }
+        }
+
+        // 显示结果
+        function showResult(message, type = 'info') {
+            const resultDiv = document.getElementById('result');
+            resultDiv.textContent = message;
+            
+            if (type === 'error') {
+                resultDiv.style.background = '#ffebee';
+                resultDiv.style.borderLeft = '4px solid #f44336';
+            } else if (type === 'success') {
+                resultDiv.style.background = '#e8f5e9';
+                resultDiv.style.borderLeft = '4px solid #4CAF50';
+            } else {
+                resultDiv.style.background = '#e3f2fd';
+                resultDiv.style.borderLeft = '4px solid #2196F3';
+            }
+        }
+
+        // 页面加载时自动加载合约信息
+        window.onload = function() {
+            loadContractInfo();
+        };
+    </script>
+</body>
+</html>

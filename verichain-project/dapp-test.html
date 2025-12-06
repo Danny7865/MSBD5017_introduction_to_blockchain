@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DApp 验证测试</title>
+    <meta charset="utf-8">
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 1000px; margin: 0 auto; }
+        .section { margin: 30px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }
+        h2 { color: #333; border-bottom: 2px solid #4CAF50; padding-bottom: 10px; }
+        button { background: #4CAF50; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin: 5px; }
+        button:hover { background: #45a049; }
+        button.secondary { background: #2196F3; }
+        button.secondary:hover { background: #0b7dda; }
+        .result { background: #f5f5f5; padding: 15px; margin: 10px 0; border-radius: 5px; font-family: monospace; white-space: pre-wrap; }
+        .success { color: green; border-left: 4px solid green; }
+        .error { color: red; border-left: 4px solid red; }
+        .warning { color: orange; border-left: 4px solid orange; }
+        input, textarea { width: 100%; padding: 10px; margin: 5px 0; border: 1px solid #ddd; border-radius: 4px; }
+        label { display: block; margin: 10px 0 5px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>🛡️ DApp 身份验证测试</h1>
+    <p>模拟DApp如何验证用户的JWT令牌</p>
+    
+    <div class="section">
+        <h2>1. 用户提供JWT令牌</h2>
+        <p>用户已经通过验证，获得了JWT令牌。现在DApp需要验证这个令牌。</p>
+        
+        <label for="jwtToken">粘贴用户的JWT令牌：</label>
+        <textarea id="jwtToken" rows="4" placeholder="粘贴完整的JWT令牌（eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...）"></textarea>
+        
+        <button onclick="verifyToken()">验证令牌</button>
+        <button onclick="loadExampleToken()" class="secondary">加载示例令牌</button>
+        
+        <div id="tokenResult" class="result"></div>
+    </div>
+    
+    <div class="section">
+        <h2>2. 批量验证用户地址</h2>
+        <p>DApp可能需要验证多个用户（例如：检查DAO投票成员）</p>
+        
+        <label for="addresses">输入要验证的地址（每行一个）：</label>
+        <textarea id="addresses" rows="6" placeholder="0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+0x70997970C51812dc3A010C7d01b50e0d17dc79C8
+0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"></textarea>
+        
+        <button onclick="verifyBatch()">批量验证</button>
+        
+        <div id="batchResult" class="result"></div>
+    </div>
+    
+    <div class="section">
+        <h2>3. 查询链上验证状态</h2>
+        <p>检查用户的验证是否已记录在区块链上</p>
+        
+        <label for="onchainAddress">输入要查询的地址：</label>
+        <input type="text" id="onchainAddress" placeholder="0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266">
+        
+        <button onclick="checkOnChain()">查询链上状态</button>
+        
+        <div id="onchainResult" class="result"></div>
+    </div>
+    
+    <div class="section">
+        <h2>4. 模拟真实DApp场景</h2>
+        <p>模拟一个需要验证用户身份的DApp功能</p>
+        
+        <div>
+            <h3>场景：访问受保护的DAO提案</h3>
+            <p>只有已验证的用户可以查看和投票</p>
+            
+            <button onclick="accessProtectedContent()">访问受保护内容</button>
+            <button onclick="submitVote()" id="voteBtn" disabled>提交投票</button>
+        </div>
+        
+        <div id="dappResult" class="result"></div>
+    </div>
+    
+    <script>
+        const backendUrl = 'http://localhost:3000';
+        
+        // 加载示例令牌
+        function loadExampleToken() {
+            const exampleToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIweGYzOUZkNmU1MWFhZDg4RjZGY2U2YUI4ODI3MjdjZmZmYjkyMjY2IiwidmVyaWZpZWQiOnRydWUsImlhdCI6MTcwMDAwMDAwMCwiZXhwIjoxNzAwMDg2NDAwLCJqdGkiOiJhYmNkZWYxMjM0NTY3ODkwIiwia3ljSWQiOiJreWNfMTcwMDAwMDAwMDAwMF9hYmMxMjMifQ.dummy_signature_for_demo';
+            document.getElementById('jwtToken').value = exampleToken;
+            document.getElementById('tokenResult').innerHTML = 
+                '<div class="warning">⚠️ 注意：这是一个演示用的示例令牌，实际使用时需要真实的JWT令牌</div>';
+        }
+        
+        // 1. 验证单个令牌
+        async function verifyToken() {
+            const token = document.getElementById('jwtToken').value.trim();
+            
+            if (!token) {
+                document.getElementById('tokenResult').innerHTML = 
+                    '<div class="error">❌ 请输入JWT令牌</div>';
+                return;
+            }
+            
+            document.getElementById('tokenResult').innerHTML = '正在验证令牌...';
+            
+            try {
+                const response = await fetch(`${backendUrl}/api/dapp/verify`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    if (result.valid) {
+                        document.getElementById('tokenResult').innerHTML = 
+                            `<div class="success">
+                                ✅ 令牌验证成功！<br><br>
+                                <strong>用户信息：</strong><br>
+                                • 地址: ${result.user.address}<br>
+                                • KYC ID: ${result.user.kycId}<br>
+                                • KYC状态: ${result.user.kycStatus}<br>
+                                • 验证时间: ${result.user.verifiedAt || '未知'}<br><br>
+                                <strong>令牌信息：</strong><br>
+                                • 签发时间: ${result.tokenInfo.issuedAt}<br>
+                                • 过期时间: ${result.tokenInfo.expiresAt}<br>
+                                • 剩余有效期: ${result.tokenInfo.expiresIn}<br><br>
+                                <strong>链上状态：</strong> ${result.onChain ? '✅ 已上链' : '⚠️ 未上链'}<br>
+                                <strong>隐私保护：</strong> ✅ 系统不存储原始KYC信息
+                            </div>`;
+                    }  else {
+                        document.getElementById('tokenResult').innerHTML = 
+                            `<div class="error">
+                                ❌ 令牌无效<br>
+                                原因: ${result.reason || result.error}
+                            </div>`;
+                    }
+                } else {
+                    document.getElementById('tokenResult').innerHTML = 
+                        `<div class="error">❌ 验证失败: ${result.error}</div>`;
+                }
+            } catch (error) {
+                document.getElementById('tokenResult').innerHTML = 
+                    `<div class="error">❌ 网络错误: ${error.message}</div>`;
+            }
+        }
+        
+        // 2. 批量验证
+        async function verifyBatch() {
+            const addressesText = document.getElementById('addresses').value.trim();
+            
+            if (!addressesText) {
+                document.getElementById('batchResult').innerHTML = 
+                    '<div class="error">❌ 请输入要验证的地址</div>';
+                return;
+            }
+            
+            const addresses = addressesText.split('\n')
+                .map(addr => addr.trim())
+                .filter(addr => addr.length > 0);
+            
+            if (addresses.length === 0) {
+                document.getElementById('batchResult').innerHTML = 
+                    '<div class="error">❌ 没有有效的地址</div>';
+                return;
+            }
+            
+            document.getElementById('batchResult').innerHTML = 
+                `正在验证 ${addresses.length} 个地址...`;
+            
+            try {
+                const response = await fetch(`${backendUrl}/api/dapp/verify-batch`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ addresses })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    let html = `<div class="success">
+                        ✅ 批量验证完成<br>
+                        总计: ${result.count.total} 个地址<br>
+                        已验证: ${result.count.verified} 个地址<br><br>
+                        <strong>详细结果：</strong><br>`;
+                    
+                    Object.entries(result.results).forEach(([address, data]) => {
+                        if (data.verified) {
+                            html += `<div style="color: green; margin: 5px 0;">
+                                ✅ ${address}<br>
+                                &nbsp;&nbsp;KYC: ${data.kycId}<br>
+                                &nbsp;&nbsp;验证时间: ${data.verifiedAt}
+                            </div>`;
+                        } else {
+                            html += `<div style="color: red; margin: 5px 0;">
+                                ❌ ${address}<br>
+                                &nbsp;&nbsp;原因: ${data.reason}
+                            </div>`;
+                        }
+                    });
+                    
+                    html += '</div>';
+                    document.getElementById('batchResult').innerHTML = html;
+                } else {
+                    document.getElementById('batchResult').innerHTML = 
+                        `<div class="error">❌ 批量验证失败: ${result.error}</div>`;
+                }
+            } catch (error) {
+                document.getElementById('batchResult').innerHTML = 
+                    `<div class="error">❌ 网络错误: ${error.message}</div>`;
+            }
+        }
+        
+        // 3. 查询链上状态
+        async function checkOnChain() {
+            const address = document.getElementById('onchainAddress').value.trim();
+            
+            if (!address) {
+                document.getElementById('onchainResult').innerHTML = 
+                    '<div class="error">❌ 请输入要查询的地址</div>';
+                return;
+            }
+            
+            // 简单的地址格式验证
+            if (!address.startsWith('0x') || address.length !== 42) {
+                document.getElementById('onchainResult').innerHTML = 
+                    '<div class="error">❌ 地址格式不正确</div>';
+                return;
+            }
+            
+            document.getElementById('onchainResult').innerHTML = '正在查询链上状态...';
+            
+            try {
+                const response = await fetch(`${backendUrl}/api/dapp/onchain-status/${address}`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    if (result.onChainVerified) {
+                        document.getElementById('onchainResult').innerHTML = 
+                            `<div class="success">
+                                ✅ 链上验证通过！<br><br>
+                                <strong>地址：</strong> ${result.address}<br>
+                                <strong>合约地址：</strong> ${result.contractAddress}<br>
+                                <strong>状态：</strong> ✅ 已验证（记录在区块链上）
+                            </div>`;
+                    } else {
+                        document.getElementById('onchainResult').innerHTML = 
+                            `<div class="warning">
+                                ⚠️ 未找到链上验证记录<br><br>
+                                <strong>地址：</strong> ${result.address}<br>
+                                <strong>合约地址：</strong> ${result.contractAddress}<br>
+                                <strong>状态：</strong> ❌ 未验证（或未上链）
+                            </div>`;
+                    }
+                } else {
+                    document.getElementById('onchainResult').innerHTML = 
+                        `<div class="error">❌ 查询失败: ${result.error}</div>`;
+                }
+            } catch (error) {
+                document.getElementById('onchainResult').innerHTML = 
+                    `<div class="error">❌ 网络错误: ${error.message}</div>`;
+            }
+        }
+        
+        // 4. 模拟DApp场景
+        let currentUser = null;
+        
+        async function accessProtectedContent() {
+            document.getElementById('dappResult').innerHTML = '正在检查用户权限...';
+            
+            // 模拟：从localStorage获取用户令牌
+            const token = localStorage.getItem('vgate_token');
+            
+            if (!token) {
+                document.getElementById('dappResult').innerHTML = 
+                    `<div class="error">
+                        ❌ 访问被拒绝<br>
+                        原因：用户未登录<br><br>
+                        请先进行身份验证，然后重试。
+                    </div>`;
+                return;
+            }
+            
+            // 验证令牌
+            try {
+                const response = await fetch(`${backendUrl}/api/dapp/verify`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success && result.valid) {
+                    currentUser = result.user;
+                    
+                    document.getElementById('dappResult').innerHTML = 
+                        `<div class="success">
+                            ✅ 访问授权通过！<br><br>
+                            <strong>欢迎，${currentUser.address.substring(0, 12)}...</strong><br><br>
+                            你现在可以：<br>
+                            1. 查看DAO提案详情<br>
+                            2. 参与社区讨论<br>
+                            3. 对提案进行投票<br><br>
+                            <button onclick="showProposal()">查看提案</button>
+                            <button onclick="submitVote()" id="realVoteBtn">提交投票</button>
+                        </div>`;
+                    
+                    document.getElementById('voteBtn').disabled = false;
+                } else {
+                    document.getElementById('dappResult').innerHTML = 
+                        `<div class="error">
+                            ❌ 访问被拒绝<br>
+                            原因：${result.reason || '令牌无效'}<br><br>
+                            请重新进行身份验证。
+                        </div>`;
+                }
+            } catch (error) {
+                document.getElementById('dappResult').innerHTML = 
+                    `<div class="error">❌ 验证错误: ${error.message}</div>`;
+            }
+        }
+        
+        function showProposal() {
+            document.getElementById('dappResult').innerHTML = 
+                `<div class="success">
+                    <h3>🏛️ DAO 提案 #001</h3>
+                    <p><strong>标题：</strong>社区基金分配方案</p>
+                    <p><strong>描述：</strong>提案将1000 ETH社区基金分配给生态项目开发</p>
+                    <p><strong>截止时间：</strong>2024-12-31</p>
+                    <p><strong>当前投票：</strong> 👍 85票 | 👎 15票</p>
+                    <hr>
+                    <p>只有已验证的用户可以查看和投票此提案。</p>
+                    <p>当前用户：${currentUser.address}</p>
+                </div>`;
+        }
+        
+        function submitVote() {
+            if (!currentUser) {
+                alert('请先访问受保护内容');
+                return;
+            }
+            
+            document.getElementById('dappResult').innerHTML = 
+                `<div class="success">
+                    ✅ 投票提交成功！<br><br>
+                    <strong>用户：</strong> ${currentUser.address}<br>
+                    <strong>提案：</strong> #001 社区基金分配方案<br>
+                    <strong>投票：</strong> 👍 赞成<br>
+                    <strong>时间：</strong> ${new Date().toLocaleString()}<br><br>
+                    感谢你参与社区治理！
+                </div>`;
+        }
+        
+        // 页面加载时检查是否有令牌
+        window.onload = function() {
+            const token = localStorage.getItem('vgate_token');
+            if (token) {
+                // 尝试解码令牌显示用户信息
+                try {
+                    const payload = JSON.parse(atob(token.split('.')[1]));
+                    console.log('检测到已登录用户:', payload.sub);
+                } catch (e) {
+                    // 忽略解码错误
+                }
+            }
+        };
+    </script>
+</body>
+</html>

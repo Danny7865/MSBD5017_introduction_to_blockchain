@@ -1,0 +1,40 @@
+{
+  "_format": "hh-sol-cache-2",
+  "files": {
+    "/Users/guest1234/Desktop/hkust/sem3/msbd/group_project/verichain-project/contracts/VeriChain.sol": {
+      "lastModificationDate": 1764949202619,
+      "contentHash": "35a78ca6052eba64980d310819a0f4dd",
+      "sourceName": "contracts/VeriChain.sol",
+      "solcConfig": {
+        "version": "0.8.19",
+        "settings": {
+          "optimizer": {
+            "enabled": false,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.19"
+      ],
+      "artifacts": [
+        "VeriChain"
+      ]
+    }
+  }
+}

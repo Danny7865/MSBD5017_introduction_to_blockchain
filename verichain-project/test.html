@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>VGate 身份验证测试 - 带KYC验证</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #333; border-bottom: 2px solid #4CAF50; padding-bottom: 10px; }
+        .status { padding: 15px; border-radius: 5px; margin: 15px 0; }
+        .status.running { background: #e8f5e9; border-left: 4px solid #4CAF50; }
+        .status.error { background: #ffebee; border-left: 4px solid #f44336; }
+        .status.info { background: #e3f2fd; border-left: 4px solid #2196F3; }
+        .status.warning { background: #fff8e1; border-left: 4px solid #ff9800; }
+        button { background: #4CAF50; color: white; border: none; padding: 12px 20px; border-radius: 5px; cursor: pointer; font-size: 16px; margin: 5px; }
+        button:hover { background: #45a049; }
+        button:disabled { background: #cccccc; cursor: not-allowed; }
+        button.secondary { background: #2196F3; }
+        button.secondary:hover { background: #0b7dda; }
+        button.warning { background: #ff9800; }
+        button.warning:hover { background: #f57c00; }
+        .result { background: #f9f9f9; padding: 15px; border-radius: 5px; margin: 15px 0; border: 1px solid #ddd; white-space: pre-wrap; font-family: monospace; font-size: 14px; max-height: 300px; overflow-y: auto; }
+        .step { margin: 20px 0; padding: 15px; border: 1px solid #eee; border-radius: 5px; }
+        .step-number { display: inline-block; background: #4CAF50; color: white; width: 30px; height: 30px; text-align: center; line-height: 30px; border-radius: 50%; margin-right: 10px; }
+        .form-group { margin: 15px 0; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; color: #555; }
+        input, select, textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 16px; }
+        .required::after { content: " *"; color: red; }
+        .form-row { display: flex; gap: 15px; margin-bottom: 15px; }
+        .form-row .form-group { flex: 1; }
+        .kyc-section { background: #f9f9f9; padding: 20px; border-radius: 5px; border: 1px solid #eee; margin: 15px 0; }
+        .kyc-title { font-size: 18px; color: #333; margin-bottom: 15px; }
+        .privacy-notice { background: #e8f5e9; padding: 10px; border-radius: 5px; margin: 10px 0; font-size: 14px; }
+        .kyc-info { background: #e3f2fd; padding: 15px; border-radius: 5px; margin: 10px 0; }
+        .network-warning { margin-top: 10px; }
+        .network-buttons { margin-top: 10px; }
+        .network-buttons button { margin: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 VGate 身份验证系统 - 带KYC验证</h1>
+        
+        <div class="status info">
+            <strong>后端地址:</strong> http://localhost:3000<br>
+            <strong>状态:</strong> <span id="systemStatus">正在检查...</span><br>
+            <strong>隐私保护:</strong> <span style="color: green;">✅ 启用</span> - 系统不存储您的原始KYC信息<br>
+            <strong>推荐网络:</strong> Hardhat Local (链ID: 31337)
+        </div>
+        
+        <!-- 快速网络切换按钮 -->
+        <div style="margin: 10px 0; padding: 10px; background: #f0f8ff; border-radius: 5px; border-left: 4px solid #2196F3;">
+            <strong>网络切换助手:</strong>
+            <button onclick="quickSwitchToHardhat()" style="background: #ff9800; margin-left: 10px;">
+                快速切换到Hardhat网络
+            </button>
+            <small style="color: #666; margin-left: 10px;">（推荐用于测试）</small>
+        </div>
+        
+        <div class="privacy-notice">
+            <strong>🛡️ 隐私保护声明：</strong> 本系统采用隐私保护设计，您的原始KYC信息（姓名、身份证号等）不会被存储在我们的服务器上。系统只存储验证状态和KYC ID。
+        </div>
+        
+        <div class="step">
+            <span class="step-number">1</span>
+            <strong>连接钱包</strong>
+            <p>连接你的MetaMask钱包（使用Hardhat本地网络账户）</p>
+            <button onclick="connectWallet()" id="connectBtn">连接钱包</button>
+            <div id="walletInfo"></div>
+        </div>
+        
+        <div class="step">
+            <span class="step-number">2</span>
+            <strong>KYC身份验证</strong>
+            <p>提交个人信息进行KYC验证（信息仅发送给KYC服务，不存储在我们的服务器）</p>
+            
+            <div class="kyc-section">
+                <div class="kyc-title">📋 KYC信息验证</div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="required">证件类型</label>
+                        <select id="idType">
+                            <option value="id_card">身份证</option>
+                            <option value="passport">护照</option>
+                            <option value="driver_license">驾驶证</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="required">证件号码</label>
+                        <input type="text" id="idNumber" placeholder="请输入证件号码">
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="required">姓名</label>
+                        <input type="text" id="fullName" placeholder="请输入姓名">
+                    </div>
+                    <div class="form-group">
+                        <label>出生日期</label>
+                        <input type="date" id="birthDate">
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="required">国家/地区</label>
+                        <select id="country">
+                            <option value="CN">中国</option>
+                            <option value="US">美国</option>
+                            <option value="HK">中国香港</option>
+                            <option value="MO">中国澳门</option>
+                            <option value="TW">中国台湾</option>
+                            <option value="other">其他</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>手机号码</label>
+                        <input type="tel" id="phone" placeholder="请输入手机号码">
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>备注信息</label>
+                    <textarea id="notes" rows="2" placeholder="可选备注信息"></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label><input type="checkbox" id="privacyAgreement" checked> 我理解并同意：我的KYC信息将发送给KYC服务进行验证，但不会被存储在本系统服务器上</label>
+                </div>
+                
+                <button onclick="submitKYC()" id="kycBtn" disabled>提交KYC验证</button>
+                <div id="kycInfo"></div>
+            </div>
+        </div>
+        
+        <div class="step">
+            <span class="step-number">3</span>
+            <strong>获取Nonce</strong>
+            <p>从后端获取一次性nonce进行签名</p>
+            <button onclick="getNonce()" id="nonceBtn" disabled>获取Nonce</button>
+            <div id="nonceInfo"></div>
+        </div>
+        
+        <div class="step">
+            <span class="step-number">4</span>
+            <strong>签名验证</strong>
+            <p>签名消息并提交验证请求（包含KYC ID）</p>
+            <button onclick="signAndVerify()" id="verifyBtn" disabled>签名并验证</button>
+            <div id="verifyInfo"></div>
+        </div>
+        
+        <div class="step">
+            <span class="step-number">5</span>
+            <strong>检查状态</strong>
+            <p>验证成功后，检查你的验证状态</p>
+            <button onclick="checkStatus()" id="statusBtn" disabled>检查状态</button>
+            <button onclick="checkSystem()" class="secondary">检查系统状态</button>
+            <button onclick="clearLocalData()" class="warning">清除本地数据</button>
+            <div id="statusInfo"></div>
+        </div>
+        
+        <div class="result" id="result"></div>
+        
+        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; font-size: 14px; color: #666;">
+            <h3>📋 系统说明</h3>
+            <ol>
+                <li><strong>隐私保护设计</strong>：系统不存储您的原始KYC信息，只存储验证状态和KYC ID</li>
+                <li><strong>KYC验证流程</strong>：KYC信息发送给模拟的KYC服务进行验证，返回KYC ID</li>
+                <li><strong>钱包签名</strong>：使用私钥签名证明您拥有该钱包地址</li>
+                <li><strong>JWT令牌</strong>：验证成功后生成JWT令牌，包含KYC ID但不包含原始KYC信息</li>
+                <li><strong>人类验证上链</strong>：使用VeriChain合约进行人类验证上链，防止女巫攻击</li>
+            </ol>
+            <p><strong>环境要求：</strong></p>
+            <ol>
+                <li>Hardhat本地网络正在运行（npm run node）</li>
+                <li>VeriChain合约已部署（npm run deploy）</li>
+                <li>后端服务正在运行（npm start）</li>
+                <li>MetaMask连接到Hardhat网络（链ID: 31337, RPC: http://localhost:8545）</li>
+            </ol>
+            <p><strong>网络切换帮助：</strong></p>
+            <ol>
+                <li>点击"快速切换到Hardhat网络"按钮自动配置</li>
+                <li>或手动在MetaMask中添加网络：名称: "Hardhat Local", RPC: "http://localhost:8545", 链ID: "31337"</li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        // 全局变量
+        let provider = null;
+        let signer = null;
+        let userAddress = null;
+        let nonceData = null;
+        let kycId = null;
+        let isConnecting = false;
+        const backendUrl = 'http://localhost:3000';
+        
+        // 检查ethers是否加载成功
+        function checkEthers() {
+            if (typeof ethers === 'undefined') {
+                return false;
+            } else {
+                return true;
+            }
+        }
+        
+        // 初始化：检查ethers和后端
+        document.addEventListener('DOMContentLoaded', function() {
+            if (checkEthers()) {
+                checkSystem();
+                loadSavedData();
+            } else {
+                showResult('❌ ethers.js库加载失败，请刷新页面重试', 'error');
+            }
+        });
+        
+        // 加载已保存的数据
+        function loadSavedData() {
+            const savedAddress = localStorage.getItem('vgate_address');
+            const savedKycId = localStorage.getItem('vgate_kyc_id');
+            
+            if (savedAddress) {
+                console.log('检测到已保存的地址:', savedAddress);
+            }
+            
+            if (savedKycId) {
+                console.log('检测到已保存的KYC ID:', savedKycId);
+                kycId = savedKycId;
+                document.getElementById('kycInfo').innerHTML = `
+                    <div class="kyc-info">
+                        ✅ 检测到已保存的KYC ID: ${savedKycId}<br>
+                        <button onclick="checkKycStatus()" class="secondary">检查KYC状态</button>
+                    </div>
+                `;
+            }
+        }
+        
+        // 检查系统状态
+        async function checkSystem() {
+            showResult('正在检查系统状态...', 'info');
+            try {
+                const response = await fetch(`${backendUrl}/api/status`);
+                const data = await response.json();
+                
+                document.getElementById('systemStatus').textContent = '运行中';
+                document.getElementById('systemStatus').style.color = 'green';
+                
+                showResult(JSON.stringify(data, null, 2), 'info');
+            } catch (error) {
+                document.getElementById('systemStatus').textContent = '未连接';
+                document.getElementById('systemStatus').style.color = 'red';
+                showResult(`无法连接到后端: ${error.message}`, 'error');
+            }
+        }
+        
+        // 1. 连接钱包
+        async function connectWallet() {
+            if (!checkEthers()) {
+                showResult('❌ ethers.js库未加载，请刷新页面', 'error');
+                return;
+            }
+            
+            if (isConnecting) {
+                showResult('正在连接中，请稍候...', 'info');
+                return;
+            }
+            
+            try {
+                isConnecting = true;
+                document.getElementById('connectBtn').disabled = true;
+                document.getElementById('connectBtn').textContent = '连接中...';
+                
+                if (!window.ethereum) {
+                    alert('请安装MetaMask扩展程序！');
+                    showResult('❌ 未检测到MetaMask，请先安装MetaMask扩展', 'error');
+                    resetConnectButton();
+                    return;
+                }
+                
+                showResult('正在请求连接钱包...', 'info');
+                
+                // 请求账户访问
+                try {
+                    const accounts = await window.ethereum.request({ 
+                        method: 'eth_requestAccounts' 
+                    });
+                    
+                    if (accounts.length === 0) {
+                        showResult('❌ 用户拒绝了连接请求', 'error');
+                        resetConnectButton();
+                        return;
+                    }
+                    
+                    userAddress = accounts[0];
+                    
+                    // 创建provider
+                    provider = new ethers.providers.Web3Provider(window.ethereum);
+                    signer = provider.getSigner();
+                    
+                    // 获取网络信息
+                    const network = await provider.getNetwork();
+                    
+                    // 检查是否为Hardhat网络
+                    const isHardhatNetwork = network.chainId === 31337 || network.chainId === 1337;
+                    
+                    // 显示钱包信息
+                    let walletInfoHTML = `
+                        <div class="status running">
+                            ✅ 钱包连接成功！<br>
+                            <strong>地址:</strong> ${userAddress}<br>
+                            <strong>网络ID:</strong> ${network.chainId}<br>
+                            <strong>网络名称:</strong> ${network.name}
+                        </div>
+                    `;
+                    
+                    // 如果不是Hardhat网络，添加警告和切换按钮
+                    if (!isHardhatNetwork) {
+                        walletInfoHTML += `
+                            <div class="status warning network-warning">
+                                ⚠️ 您不在Hardhat本地网络（链ID: 31337）<br>
+                                <strong>当前网络:</strong> ${network.name} (ID: ${network.chainId})<br><br>
+                                <div class="network-buttons">
+                                    <button onclick="switchToHardhatNetwork()" class="warning">
+                                        切换到Hardhat网络
+                                    </button>
+                                    <button onclick="continueAnyway()" class="secondary">
+                                        继续使用当前网络
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                        
+                        showResult('⚠️ 警告：您不在Hardhat本地网络（链ID: 31337）。建议切换到Hardhat网络以获得最佳体验。', 'warning');
+                    } else {
+                        showResult(`✅ 钱包连接成功！\n地址: ${userAddress}\n网络: Hardhat本地网络`, 'success');
+                    }
+                    
+                    document.getElementById('walletInfo').innerHTML = walletInfoHTML;
+                    
+                    document.getElementById('kycBtn').disabled = false;
+                    document.getElementById('connectBtn').disabled = true;
+                    document.getElementById('connectBtn').textContent = '已连接';
+                    
+                    // 保存地址到localStorage
+                    localStorage.setItem('vgate_address', userAddress);
+                    
+                } catch (error) {
+                    if (error.code === 4001) {
+                        showResult('❌ 用户拒绝了连接请求', 'error');
+                    } else {
+                        showResult(`❌ 连接失败: ${error.message}`, 'error');
+                    }
+                    resetConnectButton();
+                }
+                
+            } catch (error) {
+                showResult(`❌ 连接过程出错: ${error.message}`, 'error');
+                resetConnectButton();
+            } finally {
+                isConnecting = false;
+            }
+        }
+        
+        // 重置连接按钮状态
+        function resetConnectButton() {
+            document.getElementById('connectBtn').disabled = false;
+            document.getElementById('connectBtn').textContent = '连接钱包';
+            isConnecting = false;
+        }
+        
+        // 2. 提交KYC验证
+        async function submitKYC() {
+            if (!userAddress) {
+                showResult('请先连接钱包', 'error');
+                return;
+            }
+            
+            if (!document.getElementById('privacyAgreement').checked) {
+                showResult('❌ 请先同意隐私声明', 'error');
+                return;
+            }
+            
+            // 收集KYC信息
+            const kycInfo = {
+                name: document.getElementById('fullName').value.trim(),
+                idType: document.getElementById('idType').value,
+                idNumber: document.getElementById('idNumber').value.trim(),
+                birthDate: document.getElementById('birthDate').value || null,
+                country: document.getElementById('country').value,
+                phone: document.getElementById('phone').value.trim() || null,
+                notes: document.getElementById('notes').value.trim() || null
+            };
+            
+            // 验证必填字段
+            if (!kycInfo.name) {
+                showResult('❌ 请输入姓名', 'error');
+                return;
+            }
+            
+            if (!kycInfo.idNumber) {
+                showResult('❌ 请输入证件号码', 'error');
+                return;
+            }
+            
+            // 验证身份证格式（简单验证）
+            if (kycInfo.idType === 'id_card' && !/^\d{17}[\dXx]$/.test(kycInfo.idNumber)) {
+                showResult('❌ 身份证号码格式不正确（18位）', 'error');
+                return;
+            }
+            
+            document.getElementById('kycBtn').disabled = true;
+            document.getElementById('kycBtn').textContent = '提交中...';
+            
+            showResult('正在提交KYC验证请求...\n注意：您的原始KYC信息不会被存储在我们的服务器上。', 'info');
+            
+            try {
+                const response = await fetch(`${backendUrl}/api/kyc/submit`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        address: userAddress,
+                        kycInfo: kycInfo
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    kycId = result.kycId;
+                    
+                    document.getElementById('kycInfo').innerHTML = `
+                        <div class="status running">
+                            ✅ KYC验证提交成功！<br>
+                            <strong>KYC ID:</strong> ${kycId}<br>
+                            <strong>状态:</strong> ${result.status}<br>
+                            <strong>验证时间:</strong> ${result.verifiedAt}<br>
+                            <em>您的原始KYC信息未被存储在本系统服务器上</em>
+                        </div>
+                    `;
+                    
+                    document.getElementById('nonceBtn').disabled = false;
+                    document.getElementById('kycBtn').disabled = true;
+                    document.getElementById('kycBtn').textContent = '已提交';
+                    
+                    // 保存KYC ID到localStorage
+                    localStorage.setItem('vgate_kyc_id', kycId);
+                    
+                    showResult(`✅ KYC验证提交成功！\nKYC ID: ${kycId}\n状态: ${result.status}`, 'success');
+                } else {
+                    showResult(`❌ KYC验证失败: ${result.error}`, 'error');
+                    document.getElementById('kycBtn').disabled = false;
+                    document.getElementById('kycBtn').textContent = '提交KYC验证';
+                }
+            } catch (error) {
+                showResult(`❌ 提交KYC验证失败: ${error.message}`, 'error');
+                document.getElementById('kycBtn').disabled = false;
+                document.getElementById('kycBtn').textContent = '提交KYC验证';
+            }
+        }
+        
+        // 检查KYC状态
+        async function checkKycStatus() {
+            if (!kycId) {
+                showResult('未找到KYC ID', 'error');
+                return;
+            }
+            
+            showResult(`正在检查KYC状态: ${kycId}`, 'info');
+            
+            try {
+                const response = await fetch(`${backendUrl}/api/kyc/status/${kycId}`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    showResult(`KYC状态查询成功:\n${JSON.stringify(result, null, 2)}`, 'success');
+                } else {
+                    showResult(`KYC状态查询失败: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                showResult(`查询KYC状态失败: ${error.message}`, 'error');
+            }
+        }
+        
+        // 3. 获取nonce
+        async function getNonce() {
+            if (!userAddress) {
+                showResult('请先连接钱包', 'error');
+                return;
+            }
+            
+            if (!kycId) {
+                showResult('请先完成KYC验证', 'error');
+                return;
+            }
+            
+            showResult('正在获取nonce...', 'info');
+            
+            try {
+                const response = await fetch(`${backendUrl}/api/nonce/${userAddress}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    nonceData = data;
+                    document.getElementById('nonceInfo').innerHTML = `
+                        <div class="status running">
+                            ✅ Nonce获取成功<br>
+                            <strong>消息:</strong> ${data.message}<br>
+                            <strong>过期时间:</strong> ${data.expires}
+                        </div>
+                    `;
+                    
+                    document.getElementById('verifyBtn').disabled = false;
+                    showResult(`✅ 获取nonce成功: ${data.nonce}`, 'success');
+                } else {
+                    showResult(`❌ 获取nonce失败: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                showResult(`❌ 获取nonce失败: ${error.message}`, 'error');
+            }
+        }
+        
+        // 4. 签名并验证
+        async function signAndVerify() {
+            if (!userAddress || !nonceData) {
+                showResult('请先获取nonce', 'error');
+                return;
+            }
+            
+            if (!kycId) {
+                showResult('请先完成KYC验证', 'error');
+                return;
+            }
+            
+            showResult('正在签名...', 'info');
+            
+            try {
+                // 签名消息
+                const signature = await signer.signMessage(nonceData.message);
+                showResult(`✅ 签名成功: ${signature.substring(0, 50)}...`, 'success');
+                
+                // 提交验证请求
+                showResult('正在提交验证请求...', 'info');
+                
+                const response = await fetch(`${backendUrl}/api/verify`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        address: userAddress,
+                        signature: signature,
+                        kycId: kycId
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    document.getElementById('verifyInfo').innerHTML = `
+                        <div class="status running">
+                            ✅ 身份验证成功！<br>
+                            <strong>地址:</strong> ${result.user.address}<br>
+                            <strong>KYC ID:</strong> ${result.user.kycId}<br>
+                            <strong>KYC状态:</strong> ${result.user.kycStatus}<br>
+                            <strong>证明哈希:</strong> ${result.proof.proofHash.substring(0, 32)}...<br>
+                            <strong>隐私保护:</strong> ✅ 原始KYC信息未被存储<br>
+                            <strong>人类验证状态:</strong> ${
+                                result.blockchain?.success 
+                                    ? (result.blockchain.alreadyVerified 
+                                        ? '✅ 已在链上验证（之前已验证过）' 
+                                        : '✅ 已上链验证')
+                                    : '⚠️ 未上链'
+                            }<br>
+                            ${result.blockchain?.txHash ? `<strong>交易哈希:</strong> ${result.blockchain.txHash.substring(0, 20)}...` : ''}
+                        </div>
+                    `;
+                    
+                    document.getElementById('statusBtn').disabled = false;
+                    showResult(JSON.stringify(result, null, 2), 'success');
+                    
+                    // 保存token到localStorage
+                    if (result.proof.token) {
+                        localStorage.setItem('vgate_token', result.proof.token);
+                        localStorage.setItem('vgate_user', JSON.stringify({
+                            address: userAddress,
+                            kycId: result.user.kycId,
+                            token: result.proof.token.substring(0, 50) + '...'
+                        }));
+                    }
+                } else {
+                    showResult(`❌ 验证失败: ${result.error}`, 'error');
+                }
+                
+            } catch (error) {
+                showResult(`❌ 验证过程失败: ${error.message}`, 'error');
+            }
+        }
+        
+        // 5. 检查状态
+        async function checkStatus() {
+            if (!userAddress) {
+                showResult('请先连接钱包', 'error');
+                return;
+            }
+            
+            showResult('正在查询验证状态...', 'info');
+            
+            try {
+                const response = await fetch(`${backendUrl}/api/user/${userAddress}`);
+                const data = await response.json();
+                
+                if (data.verified) {
+                    document.getElementById('statusInfo').innerHTML = `
+                        <div class="status running">
+                            ✅ 已验证<br>
+                            <strong>地址:</strong> ${data.address}<br>
+                            <strong>KYC ID:</strong> ${data.kycId}<br>
+                            <strong>KYC状态:</strong> ${data.kycStatus}<br>
+                            <strong>验证时间:</strong> ${data.verifiedAt}<br>
+                            <strong>人类验证状态:</strong> ${data.onChain ? '✅ 已上链' : '⚠️ 未上链'}<br>
+                            <strong>到期时间:</strong> ${data.expires}
+                        </div>
+                    `;
+                } else {
+                    document.getElementById('statusInfo').innerHTML = `
+                        <div class="status error">
+                            ❌ 未验证<br>
+                            <strong>原因:</strong> ${data.message}
+                        </div>
+                    `;
+                }
+                
+                showResult(JSON.stringify(data, null, 2), 'info');
+            } catch (error) {
+                showResult(`❌ 查询状态失败: ${error.message}`, 'error');
+            }
+        }
+        
+        // 清除本地数据
+        function clearLocalData() {
+            localStorage.removeItem('vgate_token');
+            localStorage.removeItem('vgate_address');
+            localStorage.removeItem('vgate_kyc_id');
+            localStorage.removeItem('vgate_user');
+            
+            userAddress = null;
+            kycId = null;
+            nonceData = null;
+            
+            document.getElementById('walletInfo').innerHTML = '';
+            document.getElementById('kycInfo').innerHTML = '';
+            document.getElementById('nonceInfo').innerHTML = '';
+            document.getElementById('verifyInfo').innerHTML = '';
+            document.getElementById('statusInfo').innerHTML = '';
+            
+            document.getElementById('connectBtn').disabled = false;
+            document.getElementById('connectBtn').textContent = '连接钱包';
+            document.getElementById('kycBtn').disabled = false;
+            document.getElementById('kycBtn').textContent = '提交KYC验证';
+            document.getElementById('nonceBtn').disabled = true;
+            document.getElementById('verifyBtn').disabled = true;
+            document.getElementById('statusBtn').disabled = true;
+            
+            showResult('✅ 本地数据已清除，可以重新开始验证流程', 'success');
+        }
+        
+        // ============= 网络切换相关函数 =============
+        
+        // 切换到Hardhat网络
+        async function switchToHardhatNetwork() {
+            try {
+                // 检查MetaMask是否可用
+                if (!window.ethereum) {
+                    alert('请安装MetaMask扩展程序！');
+                    return;
+                }
+                
+                showResult('正在切换到Hardhat网络...', 'info');
+                
+                // 尝试切换到Hardhat网络 (链ID: 31337)
+                try {
+                    await window.ethereum.request({
+                        method: 'wallet_switchEthereumChain',
+                        params: [{ chainId: '0x7a69' }], // 31337 的十六进制是 0x7a69
+                    });
+                    showResult('✅ 已切换到Hardhat网络', 'success');
+                    
+                    // 刷新页面以重新连接
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1000);
+                    
+                } catch (switchError) {
+                    // 如果网络未添加到MetaMask，需要先添加
+                    if (switchError.code === 4902) {
+                        await addHardhatNetwork();
+                    } else {
+                        showResult(`❌ 切换网络失败: ${switchError.message}`, 'error');
+                    }
+                }
+            } catch (error) {
+                showResult(`❌ 网络切换出错: ${error.message}`, 'error');
+            }
+        }
+        
+        // 添加Hardhat网络到MetaMask
+        async function addHardhatNetwork() {
+            try {
+                await window.ethereum.request({
+                    method: 'wallet_addEthereumChain',
+                    params: [{
+                        chainId: '0x7a69', // 31337 的十六进制
+                        chainName: 'Hardhat Local',
+                        nativeCurrency: {
+                            name: 'Ether',
+                            symbol: 'ETH',
+                            decimals: 18
+                        },
+                        rpcUrls: ['http://localhost:8545'],
+                        blockExplorerUrls: []
+                    }]
+                });
+                
+                showResult('✅ Hardhat网络已添加到MetaMask', 'success');
+                
+                // 等待网络添加完成
+                setTimeout(() => {
+                    switchToHardhatNetwork();
+                }, 1000);
+                
+            } catch (addError) {
+                showResult(`❌ 添加网络失败: ${addError.message}`, 'error');
+            }
+        }
+        
+        // 继续使用当前网络
+        function continueAnyway() {
+            showResult('⚠️ 继续使用当前网络。注意：合约交互可能会失败。', 'warning');
+            
+            // 移除警告信息
+            const warningDiv = document.querySelector('.network-warning');
+            if (warningDiv) {
+                warningDiv.style.display = 'none';
+            }
+        }
+        
+        // 快速切换到Hardhat网络
+        async function quickSwitchToHardhat() {
+            try {
+                if (!window.ethereum) {
+                    alert('请安装MetaMask扩展程序！');
+                    return;
+                }
+                
+                showResult('正在尝试切换到Hardhat网络...', 'info');
+                
+                try {
+                    // 先尝试切换
+                    await window.ethereum.request({
+                        method: 'wallet_switchEthereumChain',
+                        params: [{ chainId: '0x7a69' }]
+                    });
+                    showResult('✅ 已切换到Hardhat网络', 'success');
+                    setTimeout(() => location.reload(), 1000);
+                } catch (error) {
+                    // 如果网络不存在，添加它
+                    if (error.code === 4902) {
+                        await window.ethereum.request({
+                            method: 'wallet_addEthereumChain',
+                            params: [{
+                                chainId: '0x7a69',
+                                chainName: 'Hardhat Local',
+                                nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+                                rpcUrls: ['http://localhost:8545']
+                            }]
+                        });
+                        showResult('✅ Hardhat网络已添加，正在切换...', 'success');
+                        setTimeout(() => quickSwitchToHardhat(), 1000);
+                    } else {
+                        showResult(`❌ 切换失败: ${error.message}`, 'error');
+                    }
+                }
+            } catch (error) {
+                showResult(`❌ 错误: ${error.message}`, 'error');
+            }
+        }
+        
+        // 显示结果
+        function showResult(message, type = 'info') {
+            const resultDiv = document.getElementById('result');
+            resultDiv.textContent = message;
+            
+            if (type === 'error') {
+                resultDiv.style.background = '#ffebee';
+                resultDiv.style.borderLeft = '4px solid #f44336';
+            } else if (type === 'success') {
+                resultDiv.style.background = '#e8f5e9';
+                resultDiv.style.borderLeft = '4px solid #4CAF50';
+            } else if (type === 'warning') {
+                resultDiv.style.background = '#fff8e1';
+                resultDiv.style.borderLeft = '4px solid #ff9800';
+            } else {
+                resultDiv.style.background = '#e3f2fd';
+                resultDiv.style.borderLeft = '4px solid #2196F3';
+            }
+        }
+    </script>
+</body>
+</html>
