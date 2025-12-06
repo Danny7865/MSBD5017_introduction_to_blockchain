@@ -12,12 +12,20 @@ This is a Minimum Viable Product (MVP) prototype designed to demonstrate a verif
 - **Node.js** (version 16.x or higher)
 - **npm** (comes with Node.js)
 - **MetaMask** browser extension
+- **Foundry**(forge + cast + anvil)
+- **forge-std**(required for unit testing in Foundry forge-std/Test.sol)
 - Modern web browser (Chrome, Firefox, Edge)
 
+
 ### Project Dependencies
-Install required dependencies:
+Install Hardhat dependencies
 ```bash
 npm install
+```
+
+Install forge-std library:
+```bash
+forge install foundry-rs/forge-std
 ```
 
 ## Startup Methods
@@ -71,6 +79,14 @@ Usage Flow:
 3. Submit for verification
 4. The system returns verification results, showing whether the verification status is successfully recorded on the blockchain
 
+## Running Tests for Constract
+All tests are located in:
+test/VeriChain.t.sol
+
+### Run test suite:
+```bash
+forge test
+```
 
 ## Project Architecture Overview
 
